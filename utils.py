@@ -38,11 +38,12 @@ def setup_log_path(args, num_nodes=1):
         respath += f"_dropout_rate_{args.dropout_p}"
     respath += f"_warmup{args.warmup_steps}"
     respath += f"_wd{int(args.weight_decay * 100)}"
-    respath += f"_temp{int(args.temperature*100)}"
+    respath += f"_temp{int(args.temperature * 100)}"
     return respath
 
 
-def load_model_and_tokenizer(model_name, pad_token_id, load_pretrained=True, dropout_layers=-1, dropout_p=0.1, functional_dropout=False):
+def load_model_and_tokenizer(model_name, pad_token_id, load_pretrained=True, dropout_layers=-1, dropout_p=0.1,
+                             functional_dropout=False):
     if model_name == "Salesforce/codegen-350M-mono":
         logger.info('Loading CodeGen model and tokenizer...')
         tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -53,22 +54,35 @@ def load_model_and_tokenizer(model_name, pad_token_id, load_pretrained=True, dro
         if functional_dropout and dropout_layers != 0:
             raise ValueError("Default dropout and functional dropout cannot be applied simultaneously!")
 
-        if dropout_layers == -1: # apply dropout to the whole model
+        if dropout_layers == -1:  # apply dropout to the whole model
             mod_config.attn_pdrop = dropout_p
             mod_config.embd_pdrop = dropout_p
             mod_config.resid_pdrop = dropout_p
         if load_pretrained:
-            model = AutoModelForCausalLM.from_pretrained(model_name, config=mod_config)
+            model = AutoModelForCausalLM.from_pretrained(model_name, config=mod_config,
+                                                         cache_dir="/nobackup.2/yuhao/tmp")
         else:
-            model = AutoModelForCausalLM.from_config(mod_config)
+            model = AutoModelForCausalLM.from_config(mod_config, cache_dir="/nobackup.2/yuhao/tmp")
 
-        if dropout_layers > 0: # add dropout to specified layers
+        if dropout_layers > 0:  # add dropout to specified layers
             for layer_num in range(-1, -dropout_layers - 1, -1):
                 model.transformer.h[layer_num].attn.attn_dropout.p = dropout_p
                 model.transformer.h[layer_num].attn.resid_dropout.p = dropout_p
                 model.transformer.h[layer_num].mlp.dropout.p = dropout_p
         logger.info(f"Number of active dropout layers inside model: {dropout_layers}")
         logger.info("Done.")
+    elif model_name in ["Salesforce/codegen-2B-mono", "Salesforce/codegen-6B-mono"]:
+        logger.info('Loading CodeGen model and tokenizer...')
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer.pad_token = pad_token_id
+        mod_config = AutoConfig.from_pretrained(model_name)
+        if load_pretrained:
+            model = AutoModelForCausalLM.from_pretrained(model_name, config=mod_config,
+                                                         cache_dir="/nobackup.2/yuhao/tmp", torch_dtype=torch.float16)
+        else:
+            model = AutoModelForCausalLM.from_config(mod_config, cache_dir="/nobackup.2/yuhao/tmp",
+                                                     torch_dtype=torch.float16)
+        model.gradient_checkpointing_enable()
 
     elif model_name in ["gpt2", "gpt2-large"]:
         logger.info(f"functional_dropout: {functional_dropout}")
@@ -117,7 +131,7 @@ def load_deepspeed_state_dict(state_dict_path):
         unwrapped_state_dict = {}
         for key, value in state_dict.items():
             if key.startswith(key_prefix):
-                new_key = key[len(key_prefix) + 1 :]
+                new_key = key[len(key_prefix) + 1:]
                 unwrapped_state_dict[new_key] = value
     else:
         unwrapped_state_dict = state_dict
@@ -155,7 +169,7 @@ def get_loss_func(args, pad_token_id):
         loss_func_tok = ContraCLMTokLoss(pad_token_id, args.temperature)
     else:
         loss_func_tok = None
-    
+
     if args.loss == 'ContraCLMSeq' or args.loss == 'ContraCLM':
         loss_func_seq = ContraCLMSeqLoss(pad_token_id, args.temperature)
     else:
@@ -166,6 +180,7 @@ def get_loss_func(args, pad_token_id):
 
 class LitProgressBar(TQDMProgressBar):
     '''Overriding progress bar metrics to display more meaningful stats than defaults'''
+
     def __init__(self, total_train_steps, grad_accumulate_steps):
         super(LitProgressBar, self).__init__()
         self.total_train_steps = total_train_steps * grad_accumulate_steps
@@ -188,12 +203,13 @@ class LitProgressBar(TQDMProgressBar):
                 advance = leftover if (current == total and leftover != 0) else refresh_rate
                 bar.update(advance)
                 bar.refresh()
+
         current = self.train_batch_idx + self._val_processed
         if self._should_update(current, self.main_progress_bar.total):
             _update_n(self.main_progress_bar, current, self.refresh_rate)
             self.main_progress_bar.set_postfix(self.get_metrics(trainer, pl_module))
-            
-            
+
+
 class CheckpointEveryNSteps(pl.Callback):
     """
     Save a checkpoint every N steps, instead of Lightning's default that checkpoints
@@ -201,10 +217,10 @@ class CheckpointEveryNSteps(pl.Callback):
     """
 
     def __init__(
-        self,
-        save_step_frequency=5000,
-        prefix="NStep-ckpt",
-        use_modelcheckpoint_filename=False,
+            self,
+            save_step_frequency=5000,
+            prefix="NStep-ckpt",
+            use_modelcheckpoint_filename=False,
     ):
         """
         Args:
@@ -229,6 +245,7 @@ class CheckpointEveryNSteps(pl.Callback):
                 filename = f"{self.prefix}_{epoch=}_{global_step=}.ckpt"
             ckpt_path = os.path.join(trainer.checkpoint_callback.dirpath, filename)
             trainer.save_checkpoint(ckpt_path)
+
 
 class GPUtilCallback(Callback):
     def __init__(self):

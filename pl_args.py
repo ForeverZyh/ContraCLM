@@ -33,13 +33,13 @@ def add_pl_args(parent_parser):
     parser.add_argument("--use_deepspeed", action="store_true", help="Use DeepSpeed")
     parser.add_argument("--debug_cuda_mem", action="store_true", help="Print GPU util")
     parser.add_argument("--precision", type=int, default=32, help="training precision")
-    parser.add_argument("--ds_config", type=str, default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'deepspeed', 'stage2.json'), help="deepspeed config")
+    parser.add_argument("--ds_config", type=str, default='stage2.json', help="deepspeed config")
     return parent_parser
 
 def add_model_args(parent_parser):
     parser = parent_parser.add_argument_group("LitCodeGen")
     # CodeGen specific arguments
-    parser.add_argument("--model_name", type=str, default='gpt2', choices=["gpt2", "gpt2-large", "Salesforce/codegen-350M-mono"])
+    parser.add_argument("--model_name", type=str, default='gpt2')
     parser.add_argument("--pad_token_id", type=int, default=50256)  # see here https://github.com/salesforce/CodeGen/blob/2ca076874ca2d26c2437df2968f6c43df92748bc/jaxformer/hf/sample.py#L201
     parser.add_argument("--dropout_layers", type=int, default=-1, help="Number of layers to add dropout to; if -1, dropout will be added to all layers; if 0, no dropout will be used")
     parser.add_argument("--dropout_p", type=float, default=0.1, help="Value of dropout probability to be added")

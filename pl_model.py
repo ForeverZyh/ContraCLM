@@ -1,7 +1,8 @@
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from deepspeed.ops.adam import FusedAdam
+from deepspeed.ops.adam import FusedAdam, DeepSpeedCPUAdam
+from torch.optim import AdamW
 from transformers.optimization import get_linear_schedule_with_warmup
 from transformers.trainer_pt_utils import get_parameter_names
 
@@ -169,7 +170,10 @@ class LitContraCLM(pl.LightningModule):
             },
         ]
 
-        optimizer = FusedAdam(optim_groups, lr=self.lr)
+        if "stage3" in self.trainer_args.ds_config:
+            optimizer = DeepSpeedCPUAdam(optim_groups, lr=self.lr)
+        else:
+            optimizer = FusedAdam(optim_groups, lr=self.lr)
         # optimizer = AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         if self.no_scheduling:
             return optimizer

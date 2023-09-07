@@ -37,7 +37,7 @@ def main():
     args = parser.parse_args()
     seed_everything(args.seed, workers=True)
     num_nodes = 1
-
+    args.ds_config = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'deepspeed', args.ds_config)
     # User gives batch size over all GPUs, PL requires per GPU
     args.train_batch_size = args.train_batch_size // (args.devices * num_nodes)
     args.valid_batch_size = args.valid_batch_size // (args.devices * num_nodes)
